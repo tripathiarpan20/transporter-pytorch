@@ -24,7 +24,7 @@ parser.add_argument('--max_epochs', type=int, default=50, help='')
 parser.add_argument('--sample_rate', type=int, default=4, help='')
 parser.add_argument('--batch_size', type=int, default=32, help='')
 parser.add_argument('--num_workers', type=int, default=1, help='')
-parser.add_argument('--num_gpus', type=int, default=2, help='')
+parser.add_argument('--num_gpus', type=int, default=1, help='')
 parser.add_argument('--num_nodes', type=int, default=1, help='')
 parser.add_argument('--metric', type=str, default='mse', help='')
 parser.add_argument('--name', type=str, default='', help='')
@@ -108,6 +108,7 @@ class VQVAEPerceptualLoss(torch.nn.Module):
 class plTransporter(pl.LightningModule):
   def __init__(self, config):
     super().__init__()
+    self.config = config
     self.model = _get_model(config)
     self.model.train()
     if args.metric == 'mse':
@@ -148,11 +149,11 @@ class plTransporter(pl.LightningModule):
 
 
   def configure_optimizers(self):
-    self.optimizer = torch.optim.Adam(model.parameters(), config.learning_rate)
+    self.optimizer = torch.optim.Adam(self.model.parameters(), self.config.learning_rate)
     self.scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer,
-        config.learning_rate_decay_every_n_steps,
-        gamma=config.learning_rate_decay_rate)
+        self.optimizer,
+        self.config.learning_rate_decay_every_n_steps,
+        gamma=self.config.learning_rate_decay_rate)
     return {"optimizer": self.optimizer, "lr_scheduler": self.scheduler, "monitor": "train_loss"}
   
 
@@ -175,7 +176,7 @@ def main():
     ckpt_cb = pl.callbacks.ModelCheckpoint('checkpoints/{epoch}-{val_loss:.5f}', monitor='val_loss', verbose=0, save_top_k=6, save_last = True, save_weights_only=False, mode='auto', period=2, prefix='ckpt_AFRESH_' + args.name + '_')
     print("Beginning Trainer!!",sys.stdout)
     
-    if args.num_gpus == 0 :
+    if args.num_gpus == 1 :
         trainer = pl.Trainer(#resume_from_checkpoint='checkpoints/ckpt_AFRESH_lr0.00001_-last.ckpt',
                          #gradient_clip_val=1.0,
                          max_epochs = args.max_epochs, checkpoint_callback= ckpt_cb)
