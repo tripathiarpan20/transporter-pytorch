@@ -9,6 +9,8 @@ from phasepack.filtergrid import filtergrid
 # Try and use the faster Fourier transform functions from the pyfftw module if
 # available
 from phasepack.tools import fft2, ifft2
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 
 def normalise(img):
   return (img - img.min())/(img.max() - img.min())
