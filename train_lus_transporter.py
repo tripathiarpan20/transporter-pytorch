@@ -28,6 +28,8 @@ parser.add_argument('--name', type=str, default='', help='')
 parser.add_argument('--data_root', type=str, default='UltrasoundVideoSummarization/', help='')
 parser.add_argument('--LUS_num_chan', type=int, default=10, help='')
 parser.add_argument('--LUS_num_keypoints', type=int, default=10, help='')
+parser.add_argument('--vq_path', type=str, default='VQVAE_unnorm_trained.pth', help='')
+
 args = parser.parse_args()
 
 print(args.name)
@@ -64,6 +66,40 @@ def _get_data_loader(config):
         dataset, batch_size=config.batch_size, sampler=sampler, pin_memory=True, num_workers=4)
     return loader
 
+class VQVAEPerceptualLoss(torch.nn.Module):
+    def __init__(self, vqvae_path = 'VQVAE_unnorm_trained.pth'):
+        super(VQVAEPerceptualLoss, self).__init__()
+        encoder = torch.load(vqvae_path)._encoder
+        encoder.eval()
+        blocks = []
+
+        encoder._residual_stack._layers[0]._block[0].inplace = False
+        encoder._residual_stack._layers[0]._block[2].inplace = False
+        encoder._residual_stack._layers[1]._block[0].inplace = False
+        encoder._residual_stack._layers[1]._block[2].inplace = False
+        for module_name, module in encoder.named_modules():
+          if module_name == '':
+            continue
+          if 'residual_stack' in module_name and 'block.' not in module_name:
+            continue
+          blocks.append(module)
+
+        #for bl in blocks:
+        #  bl.requires_grad = False
+        self.blocks = torch.nn.ModuleList(blocks)
+
+    def forward(self, input, target): #(batch_size, 10, 256, 256)
+        x = input
+        x_ = target
+        loss = 0.0
+        x = x.view(-1,256,256).unsqueeze(1)
+        x_ = x_.view(-1,256,256).unsqueeze(1)
+        for block in self.blocks:
+            x = block(x)
+            x_ = block(x_)
+            loss = loss + F.mse_loss(x, x_)
+        return loss
+
 
 
 class plTransporter(pl.LightningModule):
@@ -71,17 +107,19 @@ class plTransporter(pl.LightningModule):
     super().__init__()
     self.model = _get_model(config)
     self.model.train()
-
-
+    if args.metric == 'mse':
+        self.metric = torch.nn.MSELoss()
+    elif args.metric == 'perc':
+        self.metric = VQVAEPerceptualLoss(args.vq_path)
+        
   def forward(self, x1, x2):       
     return self.model(x1, x2)
 
-        
   def training_step(self, batch, batch_idx):
 
     x1, x2 = batch
     recovered_x2 = self.forward(x1, x2)
-    loss = torch.nn.functional.mse_loss(recovered_x2, x2)
+    loss = self.metric(recovered_x2, x2)
     self.log('train_loss',loss)
 
     return {'loss': loss}
@@ -89,7 +127,7 @@ class plTransporter(pl.LightningModule):
   def validation_step(self, batch, batch_idx):
     x1, x2 = batch
     recovered_x2 = self.forward(x1, x2)
-    loss = torch.nn.functional.mse_loss(recovered_x2, x2)
+    loss = self.metric(recovered_x2, x2)
     self.monitor = loss
     self.log('val_loss',loss)
 
