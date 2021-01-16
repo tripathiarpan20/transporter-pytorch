@@ -179,7 +179,7 @@ def main():
     if args.num_gpus == 1 :
         trainer = pl.Trainer(#resume_from_checkpoint='checkpoints/ckpt_AFRESH_lr0.00001_-last.ckpt',
                          #gradient_clip_val=1.0,
-                         max_epochs = args.max_epochs, checkpoint_callback= ckpt_cb)
+                         gpus = 1, max_epochs = args.max_epochs, checkpoint_callback= ckpt_cb)
     else:   
         trainer = pl.Trainer(#resume_from_checkpoint='checkpoints/ckpt_AFRESH_lr0.00001_-last.ckpt',
                          #gradient_clip_val=1.0,
