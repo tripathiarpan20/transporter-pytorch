@@ -4,7 +4,6 @@ import socket
 import os
 import torch
 import torch.utils.data
-from torch.utils.tensorboard import SummaryWriter
 import torchvision
 from torchvision import transforms
 from data import Dataset, Sampler
@@ -26,6 +25,7 @@ parser.add_argument('--sample_rate', type=int, default=4, help='')
 parser.add_argument('--batch_size', type=int, default=32, help='')
 parser.add_argument('--num_workers', type=int, default=1, help='')
 parser.add_argument('--num_gpus', type=int, default=2, help='')
+parser.add_argument('--num_nodes', type=int, default=1, help='')
 parser.add_argument('--metric', type=str, default='mse', help='')
 parser.add_argument('--name', type=str, default='', help='')
 parser.add_argument('--data_root', type=str, default='UltrasoundVideoSummarization/', help='')
@@ -106,7 +106,7 @@ class VQVAEPerceptualLoss(torch.nn.Module):
 
 
 class plTransporter(pl.LightningModule):
-  def __init__(self, config)
+  def __init__(self, config):
     super().__init__()
     self.model = _get_model(config)
     self.model.train()
@@ -169,14 +169,20 @@ def main():
     dataset = {}
     dataset["train"], dataset["val"], dataset["test"] = US_train, US_test_val, US_test_val
 
-    train_dataloader = DataLoader(dataset["train"], batch_size=hparams["batch_size"], pin_memory = True, num_workers = args.num_workers)
-    val_dataloader = DataLoader(dataset["val"], batch_size=hparams["batch_size"], pin_memory =True,num_workers = args.num_workers )
+    train_dataloader = DataLoader(dataset["train"], batch_size=args.batch_size, pin_memory = True, num_workers = args.num_workers)
+    val_dataloader = DataLoader(dataset["val"], batch_size=args.batch_size, pin_memory =True,num_workers = args.num_workers )
     
     ckpt_cb = pl.callbacks.ModelCheckpoint('checkpoints/{epoch}-{val_loss:.5f}', monitor='val_loss', verbose=0, save_top_k=6, save_last = True, save_weights_only=False, mode='auto', period=2, prefix='ckpt_AFRESH_' + args.name + '_')
     print("Beginning Trainer!!",sys.stdout)
-    trainer = pl.Trainer(#resume_from_checkpoint='checkpoints/ckpt_AFRESH_lr0.00001_-last.ckpt',
+    
+    if args.num_gpus == 0 :
+        trainer = pl.Trainer(#resume_from_checkpoint='checkpoints/ckpt_AFRESH_lr0.00001_-last.ckpt',
                          #gradient_clip_val=1.0,
-                         gpus=2, num_nodes=1,accelerator='ddp', max_epochs = args.max_epochs, checkpoint_callback= ckpt_cb)
+                         max_epochs = args.max_epochs, checkpoint_callback= ckpt_cb)
+    else:   
+        trainer = pl.Trainer(#resume_from_checkpoint='checkpoints/ckpt_AFRESH_lr0.00001_-last.ckpt',
+                         #gradient_clip_val=1.0,
+                         gpus=args.num_gpus, num_nodes=args.num_nodes,accelerator='ddp', max_epochs = args.max_epochs, checkpoint_callback= ckpt_cb)
     trainer.fit(key_model, train_dataloader, val_dataloader)
 
 
