@@ -11,6 +11,9 @@ from data import Dataset, Sampler
 import transporter
 import utils
 
+from generate_lus_data import *
+from vqvae import *
+
 import pytorch_lightning as pl
 import argparse
 import sys
